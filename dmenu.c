@@ -34,6 +34,9 @@ struct item {
 	int out;
 };
 
+enum Mode { ModeMultiRestrict, ModeSingleFree, ModeSingleRestrict };
+static enum Mode mode = ModeSingleFree;
+
 static char text[BUFSIZ] = "";
 static char *embed;
 static int bh, mw, mh;
@@ -490,14 +493,34 @@ insert:
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-		puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
-		if (!(ev->state & ControlMask)) {
-			cleanup();
-			exit(0);
+		switch (mode) {
+			case ModeSingleFree:
+				if (ev->state & ControlMask) break;
+				puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
+				cleanup();
+				exit(0);
+			case ModeSingleRestrict:
+				if (!sel || ev->state & (ShiftMask | ControlMask)) break;
+				puts(sel->text);
+				cleanup();
+				exit(0);
+			case ModeMultiRestrict:
+				if (!sel || (ev->state & ShiftMask)) break;
+				if (ev->state & ControlMask) {
+					sel->out = !(sel->out);
+					if (sel->right && (sel = sel->right) == next) {
+						curr = next;
+						calcoffsets();
+					}
+					goto draw;
+				} else {
+					sel->out = 1;
+					for (struct item *item = items; item && item->text; ++item)
+						if (item->out) puts(item->text);
+				}
+				cleanup();
+				exit(0);
 		}
-		if (sel)
-			sel->out = 1;
-		break;
 	case XK_Right:
 	case XK_KP_Right:
 		if (text[cursor] != '\0') {
@@ -710,7 +733,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -733,6 +756,16 @@ main(int argc, char *argv[])
 		else if (!strcmp(argv[i], "-i")) { /* case-insensitive item matching */
 			fstrncmp = strncasecmp;
 			fstrstr = cistrstr;
+		} else if (!strcmp(argv[i], "-mr")) {
+			if (mode == ModeSingleFree || mode == ModeMultiRestrict)
+				mode = ModeMultiRestrict;
+			else
+				die("Conflicting mode settings");
+		} else if (!strcmp(argv[i], "-sr")) {
+			if (mode == ModeSingleFree || mode == ModeSingleRestrict)
+				mode = ModeSingleRestrict;
+			else
+				die("Conflicting mode settings");
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */

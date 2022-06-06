@@ -47,6 +47,12 @@ is faster, but will lock up X until stdin reaches end\-of\-file.
 .B \-i
 dmenu matches menu items case insensitively.
 .TP
+.B \-sr
+single-return mode. Only allows a single result, and must be chosen from stdin.
+.TP
+.B \-mr
+multi-return mode. Allows returning multiple items read from stdin.
+.TP
 .BI \-l " lines"
 dmenu lists items vertically, with the given number of lines.
 .TP
