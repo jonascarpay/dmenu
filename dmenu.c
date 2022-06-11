@@ -35,7 +35,7 @@ struct item {
 	struct item *left, *right;
 	int out;
 	int index;
-	int len;
+	int fzf_priority; /* lower is better */
 };
 
 enum Mode { ModeMultiRestrict, ModeSingleFree, ModeSingleRestrict };
@@ -44,8 +44,9 @@ static enum Mode mode = ModeSingleFree;
 enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
 
-enum MatchStyle { Simple, FZF };
+enum MatchStyle { Simple, FZF, FZFSep };
 static enum MatchStyle match_style = Simple;
+static char* fzf_sep;
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
 static char text[BUFSIZ] = "";
@@ -288,8 +289,11 @@ simple_match(void)
 }
 
 int
-compare_len_fn(const void *a, const void *b){
-	return (*(struct item**) a)->len - (*(struct item**) b)->len;
+fzf_compare_fn(const void *a, const void *b){
+	const struct item* ia = *(struct item**) a;
+	const struct item* ib = *(struct item**) b;
+	int prec = ia->fzf_priority - ib->fzf_priority;
+	return prec? prec : ia->index - ib->index;
 }
 
 static void
@@ -306,7 +310,7 @@ fzf_match(void)
 	}
 
 	matches = matchend = NULL;
-	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), compare_len_fn);
+	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), fzf_compare_fn);
 	for (int i = 0; i < nr_matches; ++i) {
 		appenditem(sort_scratchpad[i], &matches, &matchend);
 	}
@@ -324,6 +328,7 @@ match(void)
 			simple_match();
 			break;
 		case FZF:
+		case FZFSep:
 			fzf_match();
 			break;
 	}
@@ -616,6 +621,22 @@ paste(void)
 	drawmenu();
 }
 
+static int
+calc_fzf_priority(const char* text) {
+	int n = 0;
+	switch (match_style) {
+		case FZFSep:
+			for (int i = 0; text[i] != '\0'; ++i)
+				for (int j = 0; fzf_sep[j] != '\0'; ++j)
+					if (text[i] == fzf_sep[j]) n++;
+			return n;
+		case FZF:
+			return strlen(text);
+		default:
+			return 0;
+	}
+}
+
 static void
 readstdin(void)
 {
@@ -633,7 +654,7 @@ readstdin(void)
 			die("cannot strdup %zu bytes:", strlen(buf) + 1);
 		items[i].out = 0;
 		items[i].index=i;
-		items[i].len=strlen(items[i].text);
+		items[i].fzf_priority=calc_fzf_priority(items[i].text);
 	}
 	if (items)
 		items[i].text = NULL;
@@ -820,7 +841,10 @@ main(int argc, char *argv[])
 		} else if (!strcmp(argv[i], "-ix")) {
 			outputStyle = PrintIndex;
 		} else if (!strcmp(argv[i], "-fzf")) {
-			match_style = FZF;
+			if (match_style == Simple)
+				match_style = FZF;
+			else
+				die("Conflicting match styles");
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
@@ -832,7 +856,13 @@ main(int argc, char *argv[])
 			prompt = argv[++i];
 		else if (!strcmp(argv[i], "-fn"))  /* font or font set */
 			fonts[0] = argv[++i];
-		else if (!strcmp(argv[i], "-nb"))  /* normal background color */
+		else if (!strcmp(argv[i], "-fzfchars")) {
+			if (match_style == Simple) {
+				fzf_sep = argv[++i];
+				match_style = FZFSep;
+			} else
+				die("Conflicting match styles");
+		} else if (!strcmp(argv[i], "-nb"))  /* normal background color */
 			colors[SchemeNorm][ColBg] = argv[++i];
 		else if (!strcmp(argv[i], "-nf"))  /* normal foreground color */
 			colors[SchemeNorm][ColFg] = argv[++i];
