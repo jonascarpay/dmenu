@@ -34,10 +34,14 @@ struct item {
 	char *text;
 	struct item *left, *right;
 	int out;
+	int index;
 };
 
 enum Mode { ModeMultiRestrict, ModeSingleFree, ModeSingleRestrict };
 static enum Mode mode = ModeSingleFree;
+
+enum OutputStyle { PrintText, PrintIndex };
+static enum OutputStyle outputStyle = PrintText;
 
 static char text[BUFSIZ] = "";
 static char *embed;
@@ -108,6 +112,19 @@ max_textw(void)
 	for (struct item *item = items; item && item->text; item++)
 		len = MAX(TEXTW(item->text), len);
 	return len;
+}
+
+static inline void
+print_item(struct item* item)
+{
+	switch (outputStyle) {
+		case PrintText:
+			puts(item->text);
+			break;
+		case PrintIndex:
+			printf("%d\n", item->index);
+			break;
+	}
 }
 
 static void
@@ -512,7 +529,7 @@ insert:
 				exit(0);
 			case ModeSingleRestrict:
 				if (!sel || ev->state & (ShiftMask | ControlMask)) break;
-				puts(sel->text);
+				print_item(sel);
 				cleanup();
 				exit(0);
 			case ModeMultiRestrict:
@@ -527,7 +544,7 @@ insert:
 				} else {
 					sel->out = 1;
 					for (struct item *item = items; item && item->text; ++item)
-						if (item->out) puts(item->text);
+						if (item->out) print_item(item);
 				}
 				cleanup();
 				exit(0);
@@ -596,6 +613,7 @@ readstdin(void)
 		if (!(items[i].text = strdup(buf)))
 			die("cannot strdup %zu bytes:", strlen(buf) + 1);
 		items[i].out = 0;
+		items[i].index=i;
 	}
 	if (items)
 		items[i].text = NULL;
@@ -745,7 +763,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -778,6 +796,8 @@ main(int argc, char *argv[])
 				mode = ModeSingleRestrict;
 			else
 				die("Conflicting mode settings");
+		} else if (!strcmp(argv[i], "-ix")) {
+			outputStyle = PrintIndex;
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
