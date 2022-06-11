@@ -35,6 +35,7 @@ struct item {
 	struct item *left, *right;
 	int out;
 	int index;
+	int len;
 };
 
 enum Mode { ModeMultiRestrict, ModeSingleFree, ModeSingleRestrict };
@@ -42,6 +43,10 @@ static enum Mode mode = ModeSingleFree;
 
 enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
+
+enum MatchStyle { Simple, FZF };
+static enum MatchStyle match_style = Simple;
+static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
 static char text[BUFSIZ] = "";
 static char *embed;
@@ -138,6 +143,7 @@ cleanup(void)
 	for (i = 0; items && items[i].text; ++i)
 		free(items[i].text);
 	free(items);
+	free(sort_scratchpad);
 	drw_free(drw);
 	XSync(dpy, False);
 	XCloseDisplay(dpy);
@@ -258,55 +264,68 @@ grabkeyboard(void)
 	die("cannot grab keyboard");
 }
 
+static int
+substring_match(char* needle, char* haystack)
+{
+	while (1) {
+		if (*needle == 0) return 1;
+		if (*haystack == 0) return 0;
+		if (tolower(*needle) == tolower(*haystack)) needle++;
+		haystack++;
+	}
+}
+
+static void
+simple_match(void)
+{
+	matches = matchend = NULL;
+	for (struct item* item = items; item && item->text; item++)
+		if (substring_match(text, item->text))
+			appenditem(item, &matches, &matchend);
+
+	curr = sel = matches;
+	calcoffsets();
+}
+
+int
+compare_len_fn(const void *a, const void *b){
+	return (*(struct item**) a)->len - (*(struct item**) b)->len;
+}
+
+static void
+fzf_match(void)
+{
+	struct item *item = items;
+
+	int nr_matches = 0;
+	for (item = items; item && item->text; item++) {
+		if (substring_match(text, item->text)) {
+			sort_scratchpad[nr_matches]=item;
+			nr_matches++;
+		}
+	}
+
+	matches = matchend = NULL;
+	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), compare_len_fn);
+	for (int i = 0; i < nr_matches; ++i) {
+		appenditem(sort_scratchpad[i], &matches, &matchend);
+	}
+	curr = sel = matches;
+	calcoffsets();
+}
+
+
 static void
 match(void)
 {
-	static char **tokv = NULL;
-	static int tokn = 0;
-
-	char buf[sizeof text], *s;
-	int i, tokc = 0;
-	size_t len, textsize;
-	struct item *item, *lprefix, *lsubstr, *prefixend, *substrend;
-
-	strcpy(buf, text);
-	/* separate input text into tokens to be matched individually */
-	for (s = strtok(buf, " "); s; tokv[tokc - 1] = s, s = strtok(NULL, " "))
-		if (++tokc > tokn && !(tokv = realloc(tokv, ++tokn * sizeof *tokv)))
-			die("cannot realloc %zu bytes:", tokn * sizeof *tokv);
-	len = tokc ? strlen(tokv[0]) : 0;
-
-	matches = lprefix = lsubstr = matchend = prefixend = substrend = NULL;
-	textsize = strlen(text) + 1;
-	for (item = items; item && item->text; item++) {
-		for (i = 0; i < tokc; i++)
-			if (!fstrstr(item->text, tokv[i]))
-				break;
-		if (i != tokc) /* not all tokens match */
-			continue;
-		/* exact matches go first, then prefixes, then substrings */
-		if (!tokc || !fstrncmp(text, item->text, textsize))
-			appenditem(item, &matches, &matchend);
-		else if (!fstrncmp(tokv[0], item->text, len))
-			appenditem(item, &lprefix, &prefixend);
-		else
-			appenditem(item, &lsubstr, &substrend);
-	}
-	if (lprefix) {
-		if (matches) {
-			matchend->right = lprefix;
-			lprefix->left = matchend;
-		} else
-			matches = lprefix;
-		matchend = prefixend;
-	}
-	if (lsubstr) {
-		if (matches) {
-			matchend->right = lsubstr;
-			lsubstr->left = matchend;
-		} else
-			matches = lsubstr;
-		matchend = substrend;
+	matches = matchend = NULL;
+	switch(match_style) {
+		case Simple:
+			simple_match();
+			break;
+		case FZF:
+			fzf_match();
+			break;
 	}
 	curr = sel = matches;
 	calcoffsets();
@@ -614,10 +633,12 @@ readstdin(void)
 			die("cannot strdup %zu bytes:", strlen(buf) + 1);
 		items[i].out = 0;
 		items[i].index=i;
+		items[i].len=strlen(items[i].text);
 	}
 	if (items)
 		items[i].text = NULL;
 	lines = MIN(lines, i);
+	sort_scratchpad = malloc(i*sizeof(struct item));
 }
 
 static void
@@ -763,7 +784,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix] [-fzf]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -798,6 +819,8 @@ main(int argc, char *argv[])
 				die("Conflicting mode settings");
 		} else if (!strcmp(argv[i], "-ix")) {
 			outputStyle = PrintIndex;
+		} else if (!strcmp(argv[i], "-fzf")) {
+			match_style = FZF;
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
