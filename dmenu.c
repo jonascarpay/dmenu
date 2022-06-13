@@ -265,6 +265,30 @@ grabkeyboard(void)
 	die("cannot grab keyboard");
 }
 
+// alphanumeric sequences only match at the start of a word
+static int
+strict_substring_match(char* needle, char* haystack)
+{
+	while (1) {
+		if (*needle == 0) return 1;
+		if (*haystack == 0) return 0;
+		if (tolower(*needle) == tolower(*haystack)) {
+			// First, try _not_ consuming the character in the needle.
+			// Without this, "ab" won't match "a/ab" because the a gets consumed by the leading a and then the b doesn't start a word.
+			if (strict_substring_match(needle, haystack+1)) return 1;
+			needle++;
+			haystack++;
+		} else{
+			// if the current char is a letter, advance to the next word.
+			// If not, advance 1
+			if (isalnum(*haystack))
+				while (isalnum(*haystack)) haystack++;
+			else
+				haystack++;
+		}
+	}
+}
+
 static int
 substring_match(char* needle, char* haystack)
 {
@@ -280,9 +304,17 @@ static void
 simple_match(void)
 {
 	matches = matchend = NULL;
+	int match_any = 0;
 	for (struct item* item = items; item && item->text; item++)
-		if (substring_match(text, item->text))
+		if (strict_substring_match(text, item->text)) {
+			match_any = 1;
 			appenditem(item, &matches, &matchend);
+		}
+
+	if (!match_any)
+		for (struct item* item = items; item && item->text; item++)
+			if (substring_match(text, item->text))
+				appenditem(item, &matches, &matchend);
 
 	curr = sel = matches;
 	calcoffsets();
