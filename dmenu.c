@@ -35,7 +35,7 @@ struct item {
 	struct item *left, *right;
 	int out;
 	int index;
-	int fzf_priority; /* lower is better */
+	int nr_words;
 };
 
 enum Mode { ModeMultiRestrict, ModeSingleFree, ModeSingleRestrict };
@@ -44,9 +44,6 @@ static enum Mode mode = ModeSingleFree;
 enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
 
-enum MatchStyle { Simple, FZFLen, FZFSep, FZFWords };
-static enum MatchStyle match_style = Simple;
-static char* fzf_sep;
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
 static char text[BUFSIZ] = "";
@@ -300,36 +297,17 @@ substring_match(char* needle, char* haystack)
 	}
 }
 
-static void
-simple_match(void)
-{
-	matches = matchend = NULL;
-	int match_any = 0;
-	for (struct item* item = items; item && item->text; item++)
-		if (strict_substring_match(text, item->text)) {
-			match_any = 1;
-			appenditem(item, &matches, &matchend);
-		}
-
-	if (!match_any)
-		for (struct item* item = items; item && item->text; item++)
-			if (substring_match(text, item->text))
-				appenditem(item, &matches, &matchend);
-
-	curr = sel = matches;
-	calcoffsets();
-}
-
+// Compare items first by nr of words, then by input index.
 int
-fzf_compare_fn(const void *a, const void *b){
+item_comparison(const void *a, const void *b){
 	const struct item* ia = *(struct item**) a;
 	const struct item* ib = *(struct item**) b;
-	int prec = ia->fzf_priority - ib->fzf_priority;
+	int prec = ia->nr_words - ib->nr_words;
 	return prec? prec : ia->index - ib->index;
 }
 
 static void
-fzf_match(void)
+match(void)
 {
 	struct item *item = items;
 
@@ -348,28 +326,9 @@ fzf_match(void)
 			}
 
 	matches = matchend = NULL;
-	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), fzf_compare_fn);
+	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), item_comparison);
 	for (int i = 0; i < nr_matches; ++i) {
 		appenditem(sort_scratchpad[i], &matches, &matchend);
-	}
-	curr = sel = matches;
-	calcoffsets();
-}
-
-
-static void
-match(void)
-{
-	matches = matchend = NULL;
-	switch(match_style) {
-		case Simple:
-			simple_match();
-			break;
-		case FZFLen:
-		case FZFWords:
-		case FZFSep:
-			fzf_match();
-			break;
 	}
 	curr = sel = matches;
 	calcoffsets();
@@ -676,24 +635,6 @@ count_words(const char* text) {
 	return words;
 }
 
-static int
-calc_fzf_priority(const char* text) {
-	int n = 0;
-	switch (match_style) {
-		case FZFWords:
-			return count_words(text);
-		case FZFSep:
-			for (const char *c = text; *c != '\0'; ++c)
-				for (const char *d = fzf_sep; *d != '\0'; ++d)
-					if (*c == *d) n++;
-			return n;
-		case FZFLen:
-			return strlen(text);
-		default:
-			return 0;
-	}
-}
-
 static void
 readstdin(void)
 {
@@ -711,7 +652,7 @@ readstdin(void)
 			die("cannot strdup %zu bytes:", strlen(buf) + 1);
 		items[i].out = 0;
 		items[i].index=i;
-		items[i].fzf_priority=calc_fzf_priority(items[i].text);
+		items[i].nr_words=count_words(items[i].text);
 	}
 	if (items)
 		items[i].text = NULL;
@@ -862,7 +803,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix] [-fzf]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -897,16 +838,6 @@ main(int argc, char *argv[])
 				die("Conflicting mode settings");
 		} else if (!strcmp(argv[i], "-ix")) {
 			outputStyle = PrintIndex;
-		} else if (!strcmp(argv[i], "-fzf")) {
-			if (match_style == Simple)
-				match_style = FZFLen;
-			else
-				die("Conflicting match styles");
-		} else if (!strcmp(argv[i], "-fzfwords")) {
-			if (match_style == Simple)
-				match_style = FZFWords;
-			else
-				die("Conflicting match styles");
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
@@ -918,13 +849,7 @@ main(int argc, char *argv[])
 			prompt = argv[++i];
 		else if (!strcmp(argv[i], "-fn"))  /* font or font set */
 			fonts[0] = argv[++i];
-		else if (!strcmp(argv[i], "-fzfchars")) {
-			if (match_style == Simple) {
-				fzf_sep = argv[++i];
-				match_style = FZFSep;
-			} else
-				die("Conflicting match styles");
-		} else if (!strcmp(argv[i], "-nb"))  /* normal background color */
+		else if (!strcmp(argv[i], "-nb"))  /* normal background color */
 			colors[SchemeNorm][ColBg] = argv[++i];
 		else if (!strcmp(argv[i], "-nf"))  /* normal foreground color */
 			colors[SchemeNorm][ColFg] = argv[++i];
@@ -940,8 +865,6 @@ main(int argc, char *argv[])
     }
 		else
 			usage();
-
-	match_style = FZFWords;
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
