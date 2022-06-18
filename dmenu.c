@@ -264,12 +264,12 @@ grabkeyboard(void)
 
 // alphanumeric sequences only match at the start of a word
 static int
-strict_substring_match(char* needle, char* haystack)
+strict_substring_match(const char* needle, const char* haystack)
 {
 	while (1) {
 		if (*needle == 0) return 1;
 		if (*haystack == 0) return 0;
-		if (tolower(*needle) == tolower(*haystack)) {
+		if (*needle == tolower(*haystack) || *needle == *haystack) {
 			// First, try _not_ consuming the character in the needle.
 			// Without this, "ab" won't match "a/ab" because the a gets consumed by the leading a and then the b doesn't start a word.
 			if (strict_substring_match(needle, haystack+1)) return 1;
@@ -287,12 +287,12 @@ strict_substring_match(char* needle, char* haystack)
 }
 
 static int
-substring_match(char* needle, char* haystack)
+substring_match(const char* needle, const char* haystack)
 {
 	while (1) {
 		if (*needle == 0) return 1;
 		if (*haystack == 0) return 0;
-		if (tolower(*needle) == tolower(*haystack)) needle++;
+		if (*needle == tolower(*haystack) || *needle == *haystack) needle++;
 		haystack++;
 	}
 }
