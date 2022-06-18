@@ -44,7 +44,7 @@ static enum Mode mode = ModeSingleFree;
 enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
 
-enum MatchStyle { Simple, FZF, FZFSep };
+enum MatchStyle { Simple, FZFLen, FZFSep, FZFWords };
 static enum MatchStyle match_style = Simple;
 static char* fzf_sep;
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
@@ -334,12 +334,18 @@ fzf_match(void)
 	struct item *item = items;
 
 	int nr_matches = 0;
-	for (item = items; item && item->text; item++) {
-		if (substring_match(text, item->text)) {
+	for (item = items; item && item->text; item++)
+		if (strict_substring_match(text, item->text)) {
 			sort_scratchpad[nr_matches]=item;
 			nr_matches++;
 		}
-	}
+
+	if (!nr_matches)
+		for (item = items; item && item->text; item++)
+			if (substring_match(text, item->text)) {
+				sort_scratchpad[nr_matches]=item;
+				nr_matches++;
+			}
 
 	matches = matchend = NULL;
 	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), fzf_compare_fn);
@@ -359,7 +365,8 @@ match(void)
 		case Simple:
 			simple_match();
 			break;
-		case FZF:
+		case FZFLen:
+		case FZFWords:
 		case FZFSep:
 			fzf_match();
 			break;
@@ -654,15 +661,33 @@ paste(void)
 }
 
 static int
+count_words(const char* text) {
+	int words = 0;
+	int in_word = 0;
+	for (const char *c = text; *c != '\0'; ++c) {
+		if (isalnum(*c)) {
+			if (!in_word) {
+				in_word = 1;
+				words++;
+			}
+		} else
+			in_word = 0;
+	}
+	return words;
+}
+
+static int
 calc_fzf_priority(const char* text) {
 	int n = 0;
 	switch (match_style) {
+		case FZFWords:
+			return count_words(text);
 		case FZFSep:
-			for (int i = 0; text[i] != '\0'; ++i)
-				for (int j = 0; fzf_sep[j] != '\0'; ++j)
-					if (text[i] == fzf_sep[j]) n++;
+			for (const char *c = text; *c != '\0'; ++c)
+				for (const char *d = fzf_sep; *d != '\0'; ++d)
+					if (*c == *d) n++;
 			return n;
-		case FZF:
+		case FZFLen:
 			return strlen(text);
 		default:
 			return 0;
@@ -874,7 +899,12 @@ main(int argc, char *argv[])
 			outputStyle = PrintIndex;
 		} else if (!strcmp(argv[i], "-fzf")) {
 			if (match_style == Simple)
-				match_style = FZF;
+				match_style = FZFLen;
+			else
+				die("Conflicting match styles");
+		} else if (!strcmp(argv[i], "-fzfwords")) {
+			if (match_style == Simple)
+				match_style = FZFWords;
 			else
 				die("Conflicting match styles");
 		} else if (i + 1 == argc)
@@ -910,6 +940,8 @@ main(int argc, char *argv[])
     }
 		else
 			usage();
+
+	match_style = FZFWords;
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
