@@ -44,6 +44,9 @@ static enum Mode mode = ModeSingleFree;
 enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
 
+enum SortStyle { NoSort, FewestWords };
+static enum SortStyle sort_style = FewestWords;
+
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
 static char text[BUFSIZ] = "";
@@ -276,12 +279,15 @@ strict_substring_match(const char* needle, const char* haystack)
 			needle++;
 			haystack++;
 		} else{
-			// if the current char is a letter, advance to the next word.
-			// If not, advance 1
-			if (isalnum(*haystack))
+			if (isalnum(*haystack)) {
+				// we failed a match against a word.
+				// don't try to match this word again.
 				while (isalnum(*haystack)) haystack++;
-			else
+			} else {
+				// spaces are wildcards for word separators
+				while (*needle == ' ') needle++;
 				haystack++;
+			}
 		}
 	}
 }
@@ -326,7 +332,7 @@ match(void)
 			}
 
 	matches = matchend = NULL;
-	qsort(sort_scratchpad, nr_matches, sizeof(struct item*), item_comparison);
+	if (sort_style == FewestWords) qsort(sort_scratchpad, nr_matches, sizeof(struct item*), item_comparison);
 	for (int i = 0; i < nr_matches; ++i) {
 		appenditem(sort_scratchpad[i], &matches, &matchend);
 	}
@@ -803,7 +809,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix] [-s]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -836,6 +842,8 @@ main(int argc, char *argv[])
 				mode = ModeSingleRestrict;
 			else
 				die("Conflicting mode settings");
+		} else if (!strcmp(argv[i], "-s")) {
+			sort_style = NoSort;
 		} else if (!strcmp(argv[i], "-ix")) {
 			outputStyle = PrintIndex;
 		} else if (i + 1 == argc)

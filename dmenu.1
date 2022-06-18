@@ -55,8 +55,8 @@ single-return mode. Only allows a single result, and must be chosen from stdin.
 .B \-mr
 multi-return mode. Allows returning multiple items read from stdin.
 .TP
-.B \-fzf
-use fzf-style matching; i.e., pick the shortest string that matches the input.
+.B \-s
+don't sort.
 .TP
 .B \-ix
 output the indices of matches, instead of their text. Only has effect if used with \-sr or \-mr.
@@ -70,9 +70,6 @@ from 0.
 .TP
 .BI \-p " prompt"
 defines the prompt to be displayed to the left of the input field.
-.TP
-.BI \-fzfchars " separator"
-fzf-style matching but with only characters present in the argument contributing to length. The primary use case it to pass "/", so shallower directories are given precedence.
 .TP
 .BI \-fn " font"
 defines the font or font set used.
