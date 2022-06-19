@@ -55,8 +55,8 @@ single-return mode. Only allows a single result, and must be chosen from stdin.
 .B \-mr
 multi-return mode. Allows returning multiple items read from stdin.
 .TP
-.B \-s
-don't sort.
+.B \-w
+sort matches by preferring matches with the fewest words. If you have an input in which some items may be prefixes of others, this forces you to disambiguate. By preferring words rather than letters, we still retain the benefit of meaningful input ordering.
 .TP
 .B \-ix
 output the indices of matches, instead of their text. Only has effect if used with \-sr or \-mr.

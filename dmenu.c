@@ -45,7 +45,7 @@ enum OutputStyle { PrintText, PrintIndex };
 static enum OutputStyle outputStyle = PrintText;
 
 enum SortStyle { NoSort, FewestWords };
-static enum SortStyle sort_style = FewestWords;
+static enum SortStyle sort_style = NoSort;
 
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
@@ -809,7 +809,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix] [-s]\n"
+	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor] [-sr|-mr] [-it initial] [-ix] [-w]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -842,8 +842,8 @@ main(int argc, char *argv[])
 				mode = ModeSingleRestrict;
 			else
 				die("Conflicting mode settings");
-		} else if (!strcmp(argv[i], "-s")) {
-			sort_style = NoSort;
+		} else if (!strcmp(argv[i], "-w")) {
+			sort_style = FewestWords;
 		} else if (!strcmp(argv[i], "-ix")) {
 			outputStyle = PrintIndex;
 		} else if (i + 1 == argc)
