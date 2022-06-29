@@ -629,8 +629,11 @@ static int
 count_words(const char* text) {
 	int words = 0;
 	int in_word = 0;
-	for (const char *c = text; *c != '\0'; ++c) {
-		if (isalnum(*c)) {
+	char c;
+	for (; (c = *text) != '\0'; ++text) {
+		if (c == '-' || c == '_') {
+			; // hyphens are ignored altogether
+		} else if (isalnum(c)) {
 			if (!in_word) {
 				in_word = 1;
 				words++;
