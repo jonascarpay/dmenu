@@ -61,6 +61,9 @@ sort matches by preferring matches with the fewest words. If you have an input i
 .B \-sep " separators"
 When counting words, only consider these characters separators. Automatically implies \-w.
 .TP
+.B \-ign " ignored_chars"
+When counting words, ignore these characters altogether; i.e. they count neither as word or non-word. Defaults to - and _.
+.TP
 .B \-ix
 output the indices of matches, instead of their text. Only has effect if used with \-sr or \-mr.
 .TP
