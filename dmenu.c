@@ -46,6 +46,7 @@ static enum OutputStyle outputStyle = PrintText;
 
 enum SortStyle { NoSort, FewestWords };
 static enum SortStyle sort_style = NoSort;
+static char *wordSeparators = NULL;
 
 static struct item **sort_scratchpad = NULL; /* A buffer that, after reading from stdin, is large enough to hold a pointer to every item. For use in sorting. */
 
@@ -625,15 +626,21 @@ paste(void)
 	drawmenu();
 }
 
+static int is_separator (const char c) {
+	if (wordSeparators) {
+		for (const char *s = wordSeparators; *s != '\0'; ++s)
+			if (c == *s) return 1;
+		return 0;
+	} else
+		return !isalnum(c);
+}
+
 static int
 count_words(const char* text) {
 	int words = 0;
 	int in_word = 0;
-	char c;
-	for (; (c = *text) != '\0'; ++text) {
-		if (c == '-' || c == '_') {
-			; // hyphens are ignored altogether
-		} else if (isalnum(c)) {
+	for (const char *c = text; *c != '\0'; ++c) {
+		if (!is_separator(*c)) {
 			if (!in_word) {
 				in_word = 1;
 				words++;
@@ -866,6 +873,8 @@ main(int argc, char *argv[])
 			colors[SchemeNorm][ColFg] = argv[++i];
 		else if (!strcmp(argv[i], "-sb"))  /* selected background color */
 			colors[SchemeSel][ColBg] = argv[++i];
+		else if (!strcmp(argv[i], "-sep"))
+			wordSeparators = argv[++i];
 		else if (!strcmp(argv[i], "-sf"))  /* selected foreground color */
 			colors[SchemeSel][ColFg] = argv[++i];
 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
