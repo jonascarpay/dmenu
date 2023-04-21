@@ -59,7 +59,7 @@ multi-return mode. Allows returning multiple items read from stdin.
 sort matches by preferring matches with the fewest words. If you have an input in which some items may be prefixes of others, this forces you to disambiguate. By preferring words rather than letters, we still retain the benefit of meaningful input ordering.
 .TP
 .B \-sep " separators"
-When counting words, only consider these characters separators. Only has effect if used with \-w.
+When counting words, only consider these characters separators. Automatically implies \-w.
 .TP
 .B \-ix
 output the indices of matches, instead of their text. Only has effect if used with \-sr or \-mr.

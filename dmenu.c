@@ -873,8 +873,10 @@ main(int argc, char *argv[])
 			colors[SchemeNorm][ColFg] = argv[++i];
 		else if (!strcmp(argv[i], "-sb"))  /* selected background color */
 			colors[SchemeSel][ColBg] = argv[++i];
-		else if (!strcmp(argv[i], "-sep"))
+		else if (!strcmp(argv[i], "-sep")) {
 			wordSeparators = argv[++i];
+			sort_style = FewestWords;
+		}
 		else if (!strcmp(argv[i], "-sf"))  /* selected foreground color */
 			colors[SchemeSel][ColFg] = argv[++i];
 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
